@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b2239">
+  <title>طقس السعودية | حالة الطقس ورادار الأمطار</title>
+  <meta name="description" content="تابع حالة الطقس ودرجات الحرارة وسرعة الرياح واحتمال الأمطار في مدن السعودية.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root { --navy:#0b2239; --blue:#1677c8; --sky:#eaf5ff; --ink:#102a43; --muted:#63788c; --line:#dce7ef; --white:#fff; }
+    * { box-sizing:border-box }
+    body { margin:0; font-family:Tahoma,Arial,sans-serif; color:var(--ink); background:#f4f8fb; }
+    header { background:linear-gradient(120deg,#0b2239,#145b8e); color:white; padding:22px max(18px,calc((100% - 1120px)/2)); }
+    .brand { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap }
+    .brand h1 { margin:0; font-size:26px; letter-spacing:-.5px }
+    .brand p { margin:7px 0 0; color:#d8eafa; font-size:13px }
+    .live { background:#ffffff1c; border:1px solid #ffffff45; border-radius:999px; padding:8px 12px; font-size:12px }
+    main { max-width:1120px; margin:22px auto; padding:0 16px 34px }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px }
+    select,button { font:inherit; border:1px solid var(--line); border-radius:12px; padding:11px 14px; background:white; color:var(--ink) }
+    button { background:var(--blue); color:white; border:0; cursor:pointer; font-weight:bold }
+    button:disabled { opacity:.55; cursor:wait }
+    .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:16px }
+    .card { background:white; border:1px solid var(--line); border-radius:18px; box-shadow:0 5px 18px #153b5610; overflow:hidden }
+    .weather { padding:20px }
+    .place { color:var(--muted); font-size:14px }
+    .temp-row { display:flex; align-items:center; gap:16px; margin:12px 0 18px }
+    .weather-icon { font-size:48px }
+    .temp { font-size:56px; font-weight:800; line-height:1 }
+    .condition { color:var(--muted); margin-top:8px }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:9px }
+    .stat { background:#f3f8fc; padding:12px; border-radius:13px; min-height:72px }
+    .stat small { color:var(--muted); display:block; margin-bottom:8px }
+    .stat strong { font-size:16px }
+    .section-title { display:flex; justify-content:space-between; align-items:center; padding:16px 18px; border-bottom:1px solid var(--line) }
+    .section-title h2 { font-size:16px; margin:0 }
+    .section-title span { font-size:11px; color:var(--muted) }
+    #map { height:420px; width:100%; background:#e7f0f5 }
+    .map-tools { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:12px 16px; border-top:1px solid var(--line); font-size:12px; color:var(--muted) }
+    input[type=range] { width:min(260px,55vw); accent-color:var(--blue); vertical-align:middle }
+    .forecast { margin-top:16px }
+    .forecast-list { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; padding:14px }
+    .day { text-align:center; background:#f5f9fc; border-radius:12px; padding:12px 5px; font-size:12px }
+    .day b { display:block; margin:7px 0; font-size:16px }
+    .note { color:var(--muted); font-size:11px; line-height:1.8; margin:14px 2px }
+    .status { font-size:12px; color:var(--muted); margin-top:10px; min-height:18px }
+    footer { text-align:center; color:var(--muted); font-size:11px; padding:18px; border-top:1px solid var(--line); background:white }
+    a { color:var(--blue) }
+    @media(max-width:760px) { .grid { grid-template-columns:1fr } #map { height:350px } .forecast-list { grid-template-columns:repeat(4,1fr) } .temp {font-size:48px} }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div>
+      <h1>🌦️ طقس السعودية</h1>
+      <p>تابع حالة الطقس في مدن المملكة</p>
+    </div>
+    <div class="live">● نسخة تجريبية</div>
+  </div>
+</header>
+<main>
+  <div class="toolbar">
+    <label for="city">اختر المدينة:
+      <select id="city">
+        <option value="riyadh">الرياض</option>
+        <option value="jeddah">جدة</option>
+        <option value="dammam" selected>الدمام</option>
+        <option value="khobar">الخبر</option>
+        <option value="makkah">مكة المكرمة</option>
+        <option value="madinah">المدينة المنورة</option>
+        <option value="abha">أبها</option>
+        <option value="tabuk">تبوك</option>
+        <option value="hail">حائل</option>
+        <option value="jazan">جازان</option>
+        <option value="taif">الطائف</option>
+        <option value="arar">عرعر</option>
+      </select>
+    </label>
+    <button id="refresh">تحديث البيانات</button>
+  </div>
+
+  <div class="grid">
+    <section class="card weather">
+      <div class="place" id="place">الدمام، المنطقة الشرقية</div>
+      <div class="temp-row">
+        <div class="weather-icon" id="icon">🌤️</div>
+        <div>
+          <div class="temp"><span id="temperature">--</span>°</div>
+          <div class="condition" id="condition">جارٍ تحميل حالة الطقس…</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><small>💨 سرعة الرياح</small><strong id="wind">--</strong></div>
+        <div class="stat"><small>💧 الرطوبة</small><strong id="humidity">--</strong></div>
+        <div class="stat"><small>🌧️ احتمال المطر</small><strong id="rain">--</strong></div>
+      </div>
+      <div class="status" id="updated">يتم جلب البيانات من Open-Meteo</div>
+    </section>
+
+    <section class="card">
+      <div class="section-title"><h2>رادار الأمطار</h2><span>مشاهدة الرصد السابق</span></div>
+      <div id="map"></div>
+      <div class="map-tools">
+        <label>الوقت السابق: <input id="frame" type="range" min="0" max="0" value="0"></label>
+        <span id="radar-time">جارٍ تحميل الرادار…</span>
+      </div>
+    </section>
+  </div>
+
+  <section class="card forecast">
+    <div class="section-title"><h2>توقعات الأيام القادمة</h2><span>توقعات نموذجية وليست رصداً مباشراً</span></div>
+    <div class="forecast-list" id="forecast">
+      <div class="day">جارٍ التحميل…</div>
+    </div>
+  </section>
+
+  <p class="note">
+    تنبيه: هذه نسخة تجريبية. بيانات الطقس من Open-Meteo وهي توقعات نماذج جوية وليست بديلاً عن التنبيهات الرسمية.
+    رادار RainViewer يعرض صور الرصد السابقة فقط، وقد لا تتوفر تغطية رادارية لكل مناطق المملكة أو كل الأوقات.
+    عند وجود حالة جوية مؤثرة، اعتمد على المركز الوطني للأرصاد والدفاع المدني.
+  </p>
+</main>
+<footer>
+  بيانات الطقس: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> ·
+  رادار الأمطار: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> ·
+  الخرائط: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const cities = {
+  riyadh:{name:"الرياض",region:"منطقة الرياض",lat:24.7136,lon:46.6753},
+  jeddah:{name:"جدة",region:"منطقة مكة المكرمة",lat:21.4858,lon:39.1925},
+  dammam:{name:"الدمام",region:"المنطقة الشرقية",lat:26.4207,lon:50.0888},
+  khobar:{name:"الخبر",region:"المنطقة الشرقية",lat:26.2172,lon:50.1971},
+  makkah:{name:"مكة المكرمة",region:"منطقة مكة المكرمة",lat:21.3891,lon:39.8579},
+  madinah:{name:"المدينة المنورة",region:"منطقة المدينة المنورة",lat:24.5247,lon:39.5692},
+  abha:{name:"أبها",region:"منطقة عسير",lat:18.2164,lon:42.5053},
+  tabuk:{name:"تبوك",region:"منطقة تبوك",lat:28.3838,lon:36.5550},
+  hail:{name:"حائل",region:"منطقة حائل",lat:27.5114,lon:41.7208},
+  jazan:{name:"جازان",region:"منطقة جازان",lat:16.8892,lon:42.5511},
+  taif:{name:"الطائف",region:"منطقة مكة المكرمة",lat:21.2703,lon:40.4158},
+  arar:{name:"عرعر",region:"منطقة الحدود الشمالية",lat:30.9753,lon:41.0381}
+};
+const $ = id => document.getElementById(id);
+const weatherText = {
+  0:["صحو","☀️"],1:["غائم جزئياً غالباً","🌤️"],2:["غائم جزئياً","⛅"],3:["غائم","☁️"],
+  45:["ضباب","🌫️"],48:["ضباب متجمد","🌫️"],51:["رذاذ خفيف","🌦️"],53:["رذاذ متوسط","🌦️"],55:["رذاذ كثيف","🌧️"],
+  61:["مطر خفيف","🌦️"],63:["مطر متوسط","🌧️"],65:["مطر غزير","🌧️"],71:["ثلوج خفيفة","🌨️"],73:["ثلوج متوسطة","🌨️"],75:["ثلوج كثيفة","🌨️"],
+  80:["زخات مطر خفيفة","🌦️"],81:["زخات مطر متوسطة","🌧️"],82:["زخات مطر قوية","⛈️"],95:["عواصف رعدية","⛈️"],96:["عواصف رعدية مع برد","⛈️"],99:["عواصف رعدية قوية مع برد","⛈️"]
+};
+function describe(code){ return weatherText[code] || ["حالة جوية متغيرة","🌤️"]; }
+function dayName(date){ return new Intl.DateTimeFormat("ar-SA",{weekday:"short"}).format(new Date(date)); }
+
+const map = L.map("map",{scrollWheelZoom:false}).setView([24.2,45.5],5);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:18, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(map);
+let radarLayer = null, radarFrames = [];
+
+async function loadWeather(key){
+  const c = cities[key];
+  $("place").textContent = `${c.name}، ${c.region}`;
+  $("condition").textContent = "جارٍ تحميل حالة الطقس…";
+  $("refresh").disabled = true;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m&hourly=precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=7&timezone=Asia%2FRiyadh`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("تعذر جلب بيانات الطقس");
+    const d = await res.json(), cur=d.current;
+    const [desc,ico]=describe(cur.weather_code);
+    $("temperature").textContent = Math.round(cur.temperature_2m);
+    $("condition").textContent = desc;
+    $("icon").textContent = ico;
+    $("wind").textContent = `${Math.round(cur.wind_speed_10m)} كم/س`;
+    $("humidity").textContent = `${cur.relative_humidity_2m}%`;
+    const now = new Date(cur.time).getTime();
+    let nearest = 0, best = Infinity;
+    d.hourly.time.forEach((t,i)=>{const delta=Math.abs(new Date(t).getTime()-now);if(delta<best){best=delta;nearest=i;}});
+    $("rain").textContent = `${d.hourly.precipitation_probability[nearest] ?? "--"}%`;
+    $("updated").textContent = `آخر وقت بيانات النموذج: ${cur.time.replace("T"," ")} · التوقيت المحلي`;
+    $("forecast").innerHTML = d.daily.time.map((date,i)=>{
+      const [t,ic]=describe(d.daily.weather_code[i]);
+      return `<div class="day">${i===0?"اليوم":dayName(date)}<b>${ic}</b><div>${Math.round(d.daily.temperature_2m_max[i])}° / ${Math.round(d.daily.temperature_2m_min[i])}°</div><small>${t}</small></div>`;
+    }).join("");
+    map.setView([c.lat,c.lon],6);
+  } catch(e) {
+    $("condition").textContent = "تعذر تحميل البيانات. حاول التحديث.";
+    $("updated").textContent = e.message;
+  } finally { $("refresh").disabled=false; }
+}
+
+async function loadRadar(){
+  try{
+    const res=await fetch("https://api.rainviewer.com/public/weather-maps.json");
+    if(!res.ok) throw new Error("تعذر تحميل الرادار");
+    const data=await res.json();
+    radarFrames=(data.radar && data.radar.past) ? data.radar.past : [];
+    if(!radarFrames.length) throw new Error("لا توجد صور رادار متاحة حالياً");
+    $("frame").max=radarFrames.length-1;
+    $("frame").value=radarFrames.length-1;
+    showRadar(radarFrames.length-1,data.host);
+    window.radarHost=data.host;
+  }catch(e){$("radar-time").textContent="الرادار غير متاح حالياً";}
+}
+function showRadar(index,host=window.radarHost){
+  if(!host || !radarFrames[index]) return;
+  const frame=radarFrames[index];
+  if(radarLayer) map.removeLayer(radarLayer);
+  const tileUrl=`${host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+  radarLayer=L.tileLayer(tileUrl,{opacity:.62,tileSize:256,maxNativeZoom:7,maxZoom:7,attribution:'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>'});
+  radarLayer.addTo(map);
+  $("radar-time").textContent=new Date(frame.time*1000).toLocaleString("ar-SA",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"short",timeZone:"Asia/Riyadh"});
+}
+$("frame").addEventListener("input",e=>showRadar(Number(e.target.value)));
+$("city").addEventListener("change",e=>loadWeather(e.target.value));
+$("refresh").addEventListener("click",()=>loadWeather($("city").value));
+loadWeather("dammam");
+loadRadar();
+</script>
+</body>
+</html>
